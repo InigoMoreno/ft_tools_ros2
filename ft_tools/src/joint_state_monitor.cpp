@@ -24,6 +24,7 @@
 #include "ft_tools/joint_state_monitor.hpp"
 
 #include <iostream>
+#include <map>
 
 namespace ft_tools
 {
@@ -51,12 +52,6 @@ bool JointStateMonitor::init(
   );
   ordered_joint_names_ =
     node_handle->get_parameter("joint_state_monitor.joints").as_string_array();
-  ordered_joint_index_map_.clear();
-  if (!ordered_joint_names_.empty()) {
-    for (size_t i = 0; i < ordered_joint_names_.size(); i++) {
-      ordered_joint_index_map_.insert(std::make_pair(ordered_joint_names_[i], i));
-    }
-  }
 
   // Create (RT pipe-based) "joint states" msg subscriber
   joints_state_subscriber_ = node_handle->create_subscription<sensor_msgs::msg::JointState>(
@@ -93,13 +88,23 @@ bool JointStateMonitor::update()
       node_handle_->get_logger(), *node_handle_->get_clock(), 1000,
       "JointStateMonitor. The joint data will not be reodered (param 'joints' empty)!");
   } else {
-    // Test vector size...
-    // TODO(tpoignonec): ordered_joint_index_map_.size() != last_joint_states_msg_->name.size()
-
-    // Update reordering vector
-    joint_state_order_.resize(nb_joints);
-    for (size_t i = 0; i < joint_state_order_.size(); i++) {
-      joint_state_order_[i] = ordered_joint_index_map_[last_joint_states_msg_.name[i]];
+    // Keep only the configured joints, in that order. Extra joints in the
+    // message (the rail, for example) are not part of the KDL chain.
+    std::map<std::string, size_t> msg_index;
+    for (size_t i = 0; i < nb_joints; ++i) {
+      msg_index.emplace(last_joint_states_msg_.name[i], i);
+    }
+    joint_state_order_.resize(ordered_joint_names_.size());
+    for (size_t i = 0; i < ordered_joint_names_.size(); ++i) {
+      auto it = msg_index.find(ordered_joint_names_[i]);
+      if (it == msg_index.end()) {
+        RCLCPP_WARN_THROTTLE(
+          node_handle_->get_logger(), *node_handle_->get_clock(), 1000,
+          "JointStateMonitor. Joint '%s' is missing from '%s'",
+          ordered_joint_names_[i].c_str(), joint_states_topic_.c_str());
+        return false;
+      }
+      joint_state_order_[i] = it->second;
     }
   }
   // Update status
@@ -187,16 +192,19 @@ std::vector<T> JointStateMonitor::get_reordered_vector(
   const std::vector<T> & vect,
   const std::vector<size_t> & order) const
 {
-  if (vect.size() != order.size()) {
-    RCLCPP_FATAL(
-      node_handle_->get_logger(),
-      "JointStateMonitor::get_reordered_vector(). Reordering vector has invalid size!"
-    );
-    assert(vect.size() == order.size());
+  std::vector<T> reordered_vect(order.size());
+  if (vect.empty()) {
+    return reordered_vect;
   }
-  std::vector<T> reordered_vect = vect;
-  for (int i = 0; i < order.size(); ++i) {
-    reordered_vect[order[i]] = vect[i];
+  for (size_t i = 0; i < order.size(); ++i) {
+    if (order[i] >= vect.size()) {
+      RCLCPP_FATAL(
+        node_handle_->get_logger(),
+        "JointStateMonitor::get_reordered_vector(). Reordering vector has invalid size!"
+      );
+      assert(order[i] < vect.size());
+    }
+    reordered_vect[i] = vect[order[i]];
   }
   return reordered_vect;
 }

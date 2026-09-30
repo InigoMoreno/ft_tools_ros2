@@ -18,7 +18,6 @@
 // Misc.
 #include <memory>
 #include <vector>
-#include <map>
 #include <string>
 
 #include <rclcpp/rclcpp.hpp>
@@ -91,7 +90,7 @@ protected:
 
   // Joint state reordering
   std::vector<std::string> ordered_joint_names_;
-  std::map<std::string, size_t> ordered_joint_index_map_;
+  // Source index in the latest JointState for each configured joint.
   std::vector<size_t> joint_state_order_;
 
   // Data
