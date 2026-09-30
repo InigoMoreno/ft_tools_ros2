@@ -344,7 +344,7 @@ bool FtCalibrationNode::init_kinematics_monitoring()
     raw_wrench_subscriber_ =
       this->create_subscription<geometry_msgs::msg::WrenchStamped>(
       parameters_.topic_raw_wrench,
-      2,
+      rclcpp::SensorDataQoS(),
       std::bind(&FtCalibrationNode::callback_new_raw_wrench, this, _1));
   } else {
     RCLCPP_ERROR(
