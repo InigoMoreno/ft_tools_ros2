@@ -183,6 +183,7 @@ void FtEstimationNode::callback_new_raw_wrench(
     last_msg_raw_wrench_ = msg_raw_wrench;
   }
   bool success = process_new_raw_wrench(msg_raw_wrench);
+  last_estimate_ok_ = success;
   if (is_first_wrench_ && success) {
     is_first_wrench_ = false;
   }
@@ -348,7 +349,8 @@ bool FtEstimationNode::register_services()
     srv_get_calibration_ || \
     srv_set_calibration_ || \
     srv_save_calibration_ || \
-    srv_reload_calibration_)
+    srv_reload_calibration_ || \
+    srv_bias_)
   {
     return false;
   }
@@ -370,6 +372,10 @@ bool FtEstimationNode::register_services()
   srv_reload_calibration_ = this->create_service<std_srvs::srv::Trigger>(
     node_name + "/reload_calibration",
     std::bind(&FtEstimationNode::reload_calibration, this, _1, _2)
+  );
+  srv_bias_ = this->create_service<std_srvs::srv::Trigger>(
+    node_name + "/bias",
+    std::bind(&FtEstimationNode::bias, this, _1, _2)
   );
   return all_ok;
 }
@@ -441,6 +447,50 @@ void FtEstimationNode::save_calibration(
       "save_calibration() service. Failed to save calibration parameters to yaml file!"
     );
   }
+}
+
+void FtEstimationNode::bias(
+  const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+  std::shared_ptr<std_srvs::srv::Trigger::Response> response)
+{
+  (void)request;
+  if (!last_estimate_ok_) {
+    response->success = false;
+    response->message = "No valid gravity-compensated wrench yet";
+    return;
+  }
+  const double age = (this->get_clock()->now() - last_msg_raw_wrench_.header.stamp).seconds();
+  if (age > 1.0) {
+    response->success = false;
+    response->message = "Estimated wrench is stale";
+    return;
+  }
+
+  // estimated = raw - gravity - offset, so adding the residual cancels the drift.
+  FtParameters ft_calib_parameters = ft_estimation_process_.get_ft_calibration();
+  const Eigen::Matrix<double, 6, 1> residual = ft_estimation_process_.get_estimated_wrench();
+  ft_calib_parameters.force_offset += residual.head(3);
+  ft_calib_parameters.torque_offset += residual.tail(3);
+  ft_estimation_process_.set_parameters(
+    ft_calib_parameters,
+    wrench_deadband_,
+    interaction_frame_wrt_sensor_frame_,
+    gravity_in_reference_frame_
+  );
+  if (!ft_calib_parameters.to_yaml(
+      parameters_.calibration.calibration_filename,
+      parameters_.calibration.calibration_package))
+  {
+    response->success = false;
+    response->message = "Offsets updated in memory, but saving the yaml file failed";
+    return;
+  }
+  response->success = true;
+  response->message = "Added the current sensor-frame residual to force_offset and torque_offset";
+  RCLCPP_INFO(
+    this->get_logger(),
+    "Bias trim [%f, %f, %f, %f, %f, %f]",
+    residual[0], residual[1], residual[2], residual[3], residual[4], residual[5]);
 }
 
 void FtEstimationNode::reload_calibration(

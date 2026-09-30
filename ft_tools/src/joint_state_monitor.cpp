@@ -112,7 +112,8 @@ bool JointStateMonitor::update()
   if (!is_ready_) {
     is_ready_ = true;
   }
-  bool all_ok = is_ready_ && check_timeout(0.01);  // 10ms default timeout
+  // ponytail: 50ms. joint_states is 250 Hz; 10ms dropped samples that were one cycle late.
+  bool all_ok = is_ready_ && check_timeout(0.05);
   if (all_ok) {
     joint_names_ = get_reordered_vector(last_joint_states_msg_.name, joint_state_order_);
     joint_positions_ = get_reordered_vector(last_joint_states_msg_.position, joint_state_order_);
@@ -216,7 +217,7 @@ std::vector<T> JointStateMonitor::get_reordered_vector(const std::vector<T> & ve
 }
 //------------------------------------------------------------------------------
 
-bool JointStateMonitor::check_timeout(double timeout /* seconds */)
+bool JointStateMonitor::check_timeout(double timeout)
 {
   if (!is_ready_) {
     RCLCPP_WARN_THROTTLE(

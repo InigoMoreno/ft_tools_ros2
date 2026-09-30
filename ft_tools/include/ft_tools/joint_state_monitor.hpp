@@ -67,7 +67,7 @@ public:
    * @param timeout max allowed delay between updates in seconds
    * @return True if everything is ok (initialized + no timeout)
    */
-  bool check_timeout(double timeout = 0.01 /* seconds */);
+  bool check_timeout(double timeout = 0.05 /* seconds */);
 
 
   template<class T>

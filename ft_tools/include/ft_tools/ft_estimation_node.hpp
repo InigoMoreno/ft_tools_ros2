@@ -68,6 +68,10 @@ public:
     const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
     std::shared_ptr<std_srvs::srv::Trigger::Response> response);
 
+  void bias(
+    const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+    std::shared_ptr<std_srvs::srv::Trigger::Response> response);
+
 protected:
   bool register_services();
 
@@ -88,6 +92,7 @@ protected:
   // Data
   geometry_msgs::msg::WrenchStamped last_msg_raw_wrench_;
   bool is_first_wrench_ = true;
+  bool last_estimate_ok_ = false;
   Eigen::Matrix<double, 6, 1> last_interaction_wrench_;
 
   // Frames of reference
@@ -128,6 +133,7 @@ protected:
   rclcpp::Service<ft_msgs::srv::GetCalibration>::SharedPtr srv_get_calibration_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr srv_save_calibration_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr srv_reload_calibration_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr srv_bias_;
 
   // F/T estimation utils
   FtEstimation ft_estimation_process_;
